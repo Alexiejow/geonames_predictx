@@ -1,0 +1,7 @@
+venv/
+data/*.csv
+data/*.html
+data/*/*.csv
+data/*/*.html
+data/*/*.txt
+__pycache__
