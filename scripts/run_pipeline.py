@@ -7,6 +7,7 @@ sys.path.append(base_dir)
 from src.pipeline.data_loader import load_geonames_data
 from src.pipeline.transform_filters import filter_populated_places
 from src.pipeline.enrich_boundaries import enrich_boundaries
+from src.pipeline.transform_remove_nested import remove_nested_points
 
 def main():
 
@@ -18,10 +19,12 @@ def main():
     
     enriched_csv = os.path.join(base_dir, "data", "processed", f"boundary_enriched_{country_code}.csv")
     
+    # If dataframe enriched with city borders is already present
     if os.path.exists(enriched_csv):
         print(f"Loading enriched boundaries from {enriched_csv}")
         df_enriched = pd.read_csv(enriched_csv)
-        
+    
+    # If need to download data and enrich with borders
     else:
         # 1) Download and load with country code
         df = load_geonames_data(country_code)
@@ -42,6 +45,15 @@ def main():
         # 3.1) Save enriched data to CSV
         df_enriched.to_csv(enriched_csv, index=False)
         print(f"Saved enriched boundaries to {enriched_csv}")
+
+    # 3.2) Remove locations within borders of selected locations
+    print("Removing locations within borders")
+    df_no_nested = remove_nested_points(df_enriched)
+
+    # 3.3) Save dataframe without nested locations
+    no_nested_csv = os.path.join(base_dir, "data", "processed", f"no_nested_{country_code}.csv")
+    df_no_nested.to_csv(no_nested_csv, index=False)
+    print(f"Saved results without nested locations to {no_nested_csv}")
         
 
 if __name__ == "__main__":
