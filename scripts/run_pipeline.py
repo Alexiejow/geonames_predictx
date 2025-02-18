@@ -64,14 +64,14 @@ def main():
         df_no_nested.to_csv(no_nested_csv, index=False)
         print(f"Saved results without nested locations to {no_nested_csv}")
         
-    # 4) Run metro candidate search
-    print("Running metro candidate search")
+    # 4) Run metro assignment
+    print("Running metro assignment")
     df_metro_assignment = assign_metros(df_no_nested)
     
     # 4.1) Save assigned data to CSV
-    output_csv = os.path.join(base_dir, "data", "processed", f"metro_candidates_{country_code}.csv")
+    output_csv = os.path.join(base_dir, "data", "processed", f"metros_assigned_{country_code}.csv")
     df_metro_assignment.to_csv(output_csv, index=False)
-    print(f"Saved metro candidates to {output_csv}")
+    print(f"Saved assigned metros {output_csv}")
 
 if __name__ == "__main__":
     import pandas as pd

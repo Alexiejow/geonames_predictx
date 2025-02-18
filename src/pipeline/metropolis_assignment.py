@@ -95,6 +95,20 @@ def assign_candidate_metro_ids_balltree(non_metros_df, metros_df):
     non_metros['candidate_metro_ids'] = [candidate_dict[i] for i in range(n)]
     return non_metros
 
+def assign_best_metro_id(candidates):
+    """
+    Given a list of candidate dictionaries (each with keys "metro_id", "force", and "distance"),
+    return the metro_id of the candidate with the highest force.
+    
+    If there's only one candidate, return its metro_id.
+    If no candidate exists, return None.
+    """
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]["metro_id"]
+    best_candidate = max(candidates, key=lambda cand: cand["force"])
+    return best_candidate["metro_id"]
 
 def assign_metros(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -118,6 +132,9 @@ def assign_metros(df: pd.DataFrame) -> pd.DataFrame:
     # Use BallTree to assign candidate metro IDs to each non-metro town.
     non_metros_df = assign_candidate_metro_ids_balltree(non_metros_df, metros_df)
     
+    # Directly assign the best candidate's metro ID.
+    non_metros_df['assigned_metro_id'] = non_metros_df['candidate_metro_ids'].apply(assign_best_metro_id)
+
     # Concatenate the two subsets.
     final_df = pd.concat([metros_df, non_metros_df], ignore_index=True)
     final_df.sort_values("geonameid", inplace=True)
