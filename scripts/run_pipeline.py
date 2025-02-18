@@ -8,6 +8,7 @@ from src.pipeline.data_loader import load_geonames_data
 from src.pipeline.transform_filters import filter_populated_places
 from src.pipeline.enrich_boundaries import enrich_boundaries
 from src.pipeline.transform_remove_nested import remove_nested_points
+from src.pipeline.metropolis_assignment import assign_metros
 
 def main():
 
@@ -46,15 +47,31 @@ def main():
         df_enriched.to_csv(enriched_csv, index=False)
         print(f"Saved enriched boundaries to {enriched_csv}")
 
-    # 3.2) Remove locations within borders of selected locations
-    print("Removing locations within borders")
-    df_no_nested = remove_nested_points(df_enriched)
-
-    # 3.3) Save dataframe without nested locations
     no_nested_csv = os.path.join(base_dir, "data", "processed", f"no_nested_{country_code}.csv")
-    df_no_nested.to_csv(no_nested_csv, index=False)
-    print(f"Saved results without nested locations to {no_nested_csv}")
+
+    # If dataframe with no nested locations is present
+    if os.path.exists(no_nested_csv):
+        print(f"Loading with no nested from {no_nested_csv}")
+        df_no_nested = pd.read_csv(no_nested_csv)
+
+    else:
+        # 3.2) Remove locations within borders of selected locations
+        print("Removing locations within borders")
+        df_no_nested = remove_nested_points(df_enriched)
+
+        # 3.3) Save dataframe without nested locations
+        no_nested_csv = os.path.join(base_dir, "data", "processed", f"no_nested_{country_code}.csv")
+        df_no_nested.to_csv(no_nested_csv, index=False)
+        print(f"Saved results without nested locations to {no_nested_csv}")
         
+    # 4) Run metro candidate search
+    print("Running metro candidate search")
+    df_metro_assignment = assign_metros(df_no_nested)
+    
+    # 4.1) Save assigned data to CSV
+    output_csv = os.path.join(base_dir, "data", "processed", f"metro_candidates_{country_code}.csv")
+    df_metro_assignment.to_csv(output_csv, index=False)
+    print(f"Saved metro candidates to {output_csv}")
 
 if __name__ == "__main__":
     import pandas as pd
