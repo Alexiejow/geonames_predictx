@@ -74,7 +74,7 @@ def assign_candidate_metro_ids_balltree(non_metros_df, metros_df):
         metro_lon = metro['longitude']
         influence_radius_km = radius(metro['population'])
         influence_radius_rad = influence_radius_km / EARTH_RADIUS
-        metro_coord_rad = np.radians([metro_lat, metro_lon]).reshape(1, -1)
+        metro_coord_rad = np.radians([float(metro_lat), float(metro_lon)]).reshape(1, -1)
         
         # Query the BallTree: get indices of non-metro towns within influence_radius_rad.
         indices = tree.query_radius(metro_coord_rad, r=influence_radius_rad)[0]
