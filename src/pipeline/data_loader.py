@@ -61,14 +61,14 @@ def format_for_saving(df: pd.DataFrame) -> pd.DataFrame:
         df["polygons"] = df["polygons"].apply(lambda x: str(x) if isinstance(x, list) else "[]")
 
     # Ensure `candidate_metro_ids` column is stored as a clean string format
-    if "candidate_metro_ids" in df.columns:
-        df["candidate_metro_ids"] = df["candidate_metro_ids"].apply(lambda x: 
-            str([{ 
-                "metro_id": c["metro_id"], 
-                "force": float(c["force"]) if isinstance(c["force"], np.float64) else c["force"], 
-                "distance": float(c["distance"]) if isinstance(c["distance"], np.float64) else c["distance"]
-            } for c in x]) if isinstance(x, list) else "[]"
-        )
+    df["candidate_metro_ids"] = df["candidate_metro_ids"].apply(lambda x: 
+    str([{ 
+        "metro_id": c["metro_id"], 
+        "metro_name": c["metro_name"],  # Ensure metro_name is stored
+        "force": float(c["force"]) if isinstance(c["force"], np.float64) else c["force"], 
+        "distance": float(c["distance"]) if isinstance(c["distance"], np.float64) else c["distance"]
+    } for c in x]) if isinstance(x, list) else "[]"
+)
 
     return df
 

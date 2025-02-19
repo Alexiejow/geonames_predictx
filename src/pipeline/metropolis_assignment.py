@@ -72,6 +72,7 @@ def assign_candidate_metro_ids_balltree(non_metros_df, metros_df):
         metro_id = metro['geonameid']
         metro_lat = metro['latitude']
         metro_lon = metro['longitude']
+        metro_name = metro['name']
         influence_radius_km = radius(metro['population'])
         influence_radius_rad = influence_radius_km / EARTH_RADIUS
         metro_coord_rad = np.radians([float(metro_lat), float(metro_lon)]).reshape(1, -1)
@@ -79,14 +80,14 @@ def assign_candidate_metro_ids_balltree(non_metros_df, metros_df):
         # Query the BallTree: get indices of non-metro towns within influence_radius_rad.
         indices = tree.query_radius(metro_coord_rad, r=influence_radius_rad)[0]
         
-        # For each candidate non-metro, compute exact distance and impact.
         for i in indices:
-            town = non_metros.iloc[i]  # Use .iloc so that i is the positional index.
+            town = non_metros.iloc[i]
             distance = haversine_distance(metro_lat, metro_lon, town['latitude'], town['longitude'])
             if distance < influence_radius_km:
                 force = calculate_metrocity_impact(influence_radius_km, distance)
                 candidate_dict[i].append({
                     "metro_id": metro_id,
+                    "metro_name": str(metro_name),
                     "force": force,
                     "distance": distance
                 })

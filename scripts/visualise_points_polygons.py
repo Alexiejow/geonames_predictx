@@ -109,13 +109,11 @@ def generate_map(df, output_html="map.html", draw_lines=False):
         
         # If drawing lines and candidate info exists, append candidate details to tooltip.
         if draw_lines and "candidate_metro_ids" in row:
-
             # If drawing lines and candidate info exists, append candidate details to tooltip.
             candidates = row.get("candidate_metro_ids", [])
-
             if isinstance(candidates, list) and len(candidates) > 0:
-                candidate_str = "<br><b>Candidate Metros:</b><br>" + "<br>".join(
-                    [f"{cand['metro_id']} (force: {cand['force']:.3f}, dist: {cand['distance']:.1f} km)"
+                candidate_str = "<br>Candidate Metros:<br>" + "<br>".join(
+                    [f"{cand['metro_name']} | {cand['metro_id']} (force: {cand['force']:.3f}, dist: {cand['distance']:.1f} km)"
                     for cand in candidates if isinstance(cand, dict) and 'metro_id' in cand]
                 )
                 tooltip_text += candidate_str
