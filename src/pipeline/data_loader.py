@@ -43,6 +43,11 @@ def load_geonames_data(country_code: str) -> pd.DataFrame:
                 names=GEONAMES_HEADERS,
                 dtype=str  # Keep as string initially, convert later
             )
+
+    # Convert necessary fields to float
+    df["latitude"] = df["latitude"].astype(float)
+    df["longitude"] = df["longitude"].astype(float)
+    df["population"] = pd.to_numeric(df["population"], errors='coerce').fillna(0).astype(int)
     
     return df
 
@@ -60,15 +65,16 @@ def format_for_saving(df: pd.DataFrame) -> pd.DataFrame:
     if "polygons" in df.columns:
         df["polygons"] = df["polygons"].apply(lambda x: str(x) if isinstance(x, list) else "[]")
 
-    # Ensure `candidate_metro_ids` column is stored as a clean string format
-    df["candidate_metro_ids"] = df["candidate_metro_ids"].apply(lambda x: 
-    str([{ 
-        "metro_id": c["metro_id"], 
-        "metro_name": c["metro_name"],  # Ensure metro_name is stored
-        "force": float(c["force"]) if isinstance(c["force"], np.float64) else c["force"], 
-        "distance": float(c["distance"]) if isinstance(c["distance"], np.float64) else c["distance"]
-    } for c in x]) if isinstance(x, list) else "[]"
-)
+    if "candidate_metro_ids" in df.columns:
+        df["candidate_metro_ids"] = df["candidate_metro_ids"].apply(lambda x: 
+            str([{ 
+                "metro_id": c["metro_id"], 
+                "metro_name": c["metro_name"],  
+                "force": float(c["force"]) if isinstance(c["force"], np.float64) else c["force"], 
+                "distance": float(c["distance"]) if isinstance(c["distance"], np.float64) else c["distance"]
+            } for c in x]) if isinstance(x, list) else "[]"
+        )
+
 
     return df
 
@@ -77,7 +83,9 @@ def save_csv(df: pd.DataFrame, filepath: str):
     """
     Saves the DataFrame to CSV after formatting necessary columns.
     """
-    df = format_for_saving(df)
+    if "candidate_metro_ids" in df.columns or "polygons" in df.columns:
+        df = format_for_saving(df)
+
     df.to_csv(filepath, index=False)
     print(f"✅ Data saved to {filepath}")
 

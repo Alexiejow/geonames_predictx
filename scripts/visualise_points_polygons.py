@@ -197,12 +197,12 @@ if __name__ == "__main__":
     ############# CONFIGURATION ##############
     
     df = load_csv(
-        "data/processed/metros_assigned_PL.csv",
+        "data/processed/assigned-metros-spark.csv",
     )
 
     # Generate the map with draw_lines enabled.
     generate_map(df,
-                 output_html="data/visualisations/cities_map.html",
+                 output_html="data/visualisations/cities_map_PL.html",
                  draw_lines=True
                  )
     
