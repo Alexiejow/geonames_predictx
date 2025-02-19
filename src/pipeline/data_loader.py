@@ -2,6 +2,8 @@ import pandas as pd
 import requests
 import zipfile
 import io
+import ast
+import numpy as np
 
 GEONAMES_HEADERS = [
     "geonameid", "name", "asciiname", "alternatenames", 
@@ -19,9 +21,6 @@ def load_geonames_data(country_code: str) -> pd.DataFrame:
     
     Example usage:
         df = load_geonames_data("PL")
-    
-    This function requires the `requests` library for HTTP and `zipfile` for
-    in-memory extraction.
     """
     # 1. Build the download URL for the given country code (e.g. 'PL')
     url = f"https://download.geonames.org/export/dump/{country_code}.zip"
@@ -33,7 +32,6 @@ def load_geonames_data(country_code: str) -> pd.DataFrame:
     
     # 3. Open the ZIP file in memory
     with zipfile.ZipFile(io.BytesIO(response.content)) as zf:
-        # The main .txt file usually has the same name as the country code
         txt_filename = f"{country_code}.txt"
         
         # 4. Read the .txt file directly from the ZIP
@@ -43,8 +41,95 @@ def load_geonames_data(country_code: str) -> pd.DataFrame:
                 sep="\t",
                 header=None,
                 names=GEONAMES_HEADERS,
-                dtype=str,  # optionally keep everything as string if large or mixed
-                # low_memory=False,  # optionally to avoid dtype warnings
+                dtype=str  # Keep as string initially, convert later
             )
     
+    return df
+
+
+### 📌 **Saving and Loading Process with Proper Formatting** ###
+
+def format_for_saving(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Ensures that all columns are stored correctly before saving as CSV.
+    Converts `candidate_metro_ids` and `polygons` to string format.
+    """
+    df = df.copy()
+
+    # Ensure `polygons` column is stored as a string
+    if "polygons" in df.columns:
+        df["polygons"] = df["polygons"].apply(lambda x: str(x) if isinstance(x, list) else "[]")
+
+    # Ensure `candidate_metro_ids` column is stored as a clean string format
+    if "candidate_metro_ids" in df.columns:
+        df["candidate_metro_ids"] = df["candidate_metro_ids"].apply(lambda x: 
+            str([{ 
+                "metro_id": c["metro_id"], 
+                "force": float(c["force"]) if isinstance(c["force"], np.float64) else c["force"], 
+                "distance": float(c["distance"]) if isinstance(c["distance"], np.float64) else c["distance"]
+            } for c in x]) if isinstance(x, list) else "[]"
+        )
+
+    return df
+
+
+def save_csv(df: pd.DataFrame, filepath: str):
+    """
+    Saves the DataFrame to CSV after formatting necessary columns.
+    """
+    df = format_for_saving(df)
+    df.to_csv(filepath, index=False)
+    print(f"✅ Data saved to {filepath}")
+
+
+def safe_parse_polygons(val):
+    """
+    Safely parses the 'polygons' column from the CSV.
+    Returns a list of polygon coordinates or an empty list if parsing fails.
+    """
+    if pd.isna(val) or val == "[]" or val == "":
+        return []
+    if isinstance(val, list):
+        return val
+    if isinstance(val, str):
+        try:
+            parsed = ast.literal_eval(val)
+            if isinstance(parsed, list):
+                return parsed
+        except Exception as e:
+            print(f"⚠️ Error parsing polygons: {e}, value: {val}")
+    return []
+
+
+def safe_parse_candidates(val):
+    """
+    Safely parses the 'candidate_metro_ids' column from the CSV.
+    Returns a list of dictionaries or an empty list if parsing fails.
+    """
+    if pd.isna(val) or val == "[]" or val == "":
+        return []
+    if isinstance(val, list):
+        return val
+    if isinstance(val, str):
+        try:
+            parsed = ast.literal_eval(val)
+            if isinstance(parsed, list):
+                return parsed
+        except Exception as e:
+            print(f"⚠️ Error parsing candidate_metro_ids: {e}, value: {val}")
+    return []
+
+
+def load_csv(filepath: str) -> pd.DataFrame:
+    """
+    Loads a CSV file and ensures proper parsing of complex fields.
+    """
+    df = pd.read_csv(
+        filepath,
+        converters={
+            "polygons": safe_parse_polygons,
+            "candidate_metro_ids": safe_parse_candidates
+        }
+    )
+    print(f"✅ Data loaded from {filepath}")
     return df
