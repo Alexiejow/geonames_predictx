@@ -1,5 +1,6 @@
 import os
 import sys
+from dotenv import load_dotenv
 
 base_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(base_dir)
@@ -13,12 +14,18 @@ from src.pipeline.metropolis_assignment import assign_metros
 
 def main():
 
+    ############### CONFIGURATION #################
+
     # Country code according to the Geonames file list (https://download.geonames.org/export/dump/)
     country_code = "PL"
 
     # Geoapify API key (free) for optional step of removing locations nested in city borders
-    API_KEY = 'YOUR GEOAPIFY API KEY'
+    load_dotenv()  # Load environment variables from .env
+    API_KEY = os.getenv("GEOAPIFY_API_KEY") # Remove this if you prefer to enter API key below
+    #API_KEY = "YOUR API KEY"
     
+     ##############################################
+     
     enriched_csv = os.path.join(base_dir, "data", "processed", f"boundary_enriched_{country_code}.csv")
     
     # If dataframe enriched with city borders is already present
