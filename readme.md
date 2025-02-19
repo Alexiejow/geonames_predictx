@@ -28,6 +28,24 @@ These scripts will download data into `data/raw/`, perform data cleaning, metrop
 
 ---
 
+## Task Description
+
+### Objective
+Process the Geonames dataset ([PL.zip](http://download.geonames.org/export/dump/PL.zip)) to identify metropolitan cities and assign nearby towns to them.
+
+### Steps
+1. **Filter Residential Locations**: Extract cities, towns, and villages while excluding non-residential places. ([Feature Codes](http://www.geonames.org/export/codes.html))
+2. **Identify Metropolitan Cities**: Classify cities as metropolitan based on population or external data.
+3. **Assign Cities to Metropolises**: Develop an algorithm to link cities to metropolises based on distance and influence.
+
+### Advanced Task
+Iteratively expand metropolitan areas as they accumulate population from assigned cities, dynamically increasing their influence.
+
+### Implementation
+Use **pandas**, **PySpark**, or other tools for data processing. Distance calculations are required for city assignments.
+
+
+
 ## Exploratory Data Analysis Summary
 
 The EDA (see /notebooks folder) includes:
