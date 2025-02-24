@@ -6,6 +6,7 @@ import math
 import numpy as np
 import pandas as pd
 import shutil
+from tqdm import tqdm 
 
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.types import StructType, StructField, StringType, FloatType, IntegerType, DateType
@@ -32,6 +33,55 @@ GEONAMES_SCHEMA = StructType([
     StructField("timezone", StringType(), True),             # e.g., "Asia/Kolkata"
     StructField("modification_date", DateType(), True)       # ISO format (e.g., "2024-01-06") can be parsed into DateType
 ])
+
+def load_allcountries_data(spark: SparkSession) -> DataFrame:
+    """
+    Downloads the allCountries.zip file from GeoNames, unzips it in memory,
+    writes the contained allCountries.txt to a temporary file, and loads it
+    into a Spark DataFrame with the proper schema.
+    
+    A progress bar (via tqdm) is shown during download.
+    """
+    url = "https://download.geonames.org/export/dump/allCountries.zip"
+    print(f"Downloading {url} ...")
+    
+    # Stream download with progress bar.
+    response = requests.get(url, stream=True)
+    response.raise_for_status()
+    total_size = int(response.headers.get('content-length', 0))
+    block_size = 1024
+    tmp_bytes = io.BytesIO()
+    with tqdm(total=total_size, unit='iB', unit_scale=True) as t:
+        for data in response.iter_content(block_size):
+            t.update(len(data))
+            tmp_bytes.write(data)
+    tmp_bytes.seek(0)
+    
+    # Open the ZIP file in memory and read the allCountries.txt file.
+    with zipfile.ZipFile(tmp_bytes) as zf:
+        txt_filename = "allCountries.txt"
+        with zf.open(txt_filename) as txt_file:
+            file_bytes = txt_file.read()
+    
+    # Write the contents to a temporary file.
+    tmp_file_path = f"/tmp/{txt_filename}"
+    with open(tmp_file_path, "wb") as f:
+        f.write(file_bytes)
+    
+    # Load the temporary file into a Spark DataFrame using the defined schema.
+    df = spark.read.csv(
+        tmp_file_path,
+        sep="\t",
+        header=False,
+        schema=GEONAMES_SCHEMA
+    )
+    
+    # Optionally, delete the temporary file (uncomment the next line if desired)
+    # os.remove(tmp_file_path)
+    
+    print(f"Loaded GeoNames data for allCountries into Spark DataFrame with {df.count()} rows.")
+    return df
+
 
 
 def load_geonames_data(spark: SparkSession, country_code: str):
@@ -96,7 +146,16 @@ def save_csv(df, filepath: str):
     Saves a Spark DataFrame as a CSV file to the specified filepath.
     Note: Spark writes out as a folder containing part files.
     """
-    df.coalesce(1).write.option("header", "true").mode("overwrite").csv(filepath)
+    # Write as a folder of part files.
+    df.write.option("header", "true").mode("overwrite").csv(filepath)
+    print(f"✅ Data saved to folder {filepath}")
+
+def save_csv_partition_countries(df, filepath: str):
+    df.write \
+        .option("header", "true") \
+        .mode("overwrite") \
+        .partitionBy("country_code") \
+        .csv(filepath)
     print(f"✅ Data saved to {filepath}")
 
 def save_csv_single_file(df: DataFrame, output_path: str) -> None:

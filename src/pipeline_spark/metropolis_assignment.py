@@ -4,7 +4,16 @@ from pyspark.sql import functions as F
 from pyspark.sql import DataFrame
 from pyspark.sql.window import Window
 
-def assign_metros(df: DataFrame) -> DataFrame:
+def debug_partition(index, iterator):
+    records = list(iterator)
+    if records:
+        # Get distinct country codes in this partition.
+        countries = {row["country_code"] for row in records if "country_code" in row}
+        print(f"Partition {index}: {len(records)} records, countries: {countries}")
+    for record in records:
+        yield record
+
+def assign_metros(df: DataFrame, all_countries = False) -> DataFrame:
     """
     Fully distributed Spark implementation of metro assignment.
     
@@ -39,6 +48,20 @@ def assign_metros(df: DataFrame) -> DataFrame:
     print("Metros:", metros_df.count())
     print("Non-metros:", non_metros_df.count())
     
+    ######### DEBUGGING
+
+    # Debug: log partition details for non_metros_df
+    non_metros_debug_rdd = non_metros_df.rdd.mapPartitionsWithIndex(debug_partition)
+    metros_debug_rdd = metros_df.rdd.mapPartitionsWithIndex(debug_partition)
+    non_metros_debug_rdd.take(1)
+    metros_debug_rdd.take(1)
+
+    # Convert back to a DataFrame using the active SparkSession.
+    non_metros_df = df.sparkSession.createDataFrame(non_metros_debug_rdd, schema=non_metros_df.schema)
+    metros_df = df.sparkSession.createDataFrame(metros_debug_rdd, schema=metros_df.schema)
+    
+
+
     # 2. Cast necessary columns.
     metros_df = metros_df.withColumn("population", F.col("population").cast("int"))
     non_metros_df = non_metros_df.withColumn("latitude", F.col("latitude").cast("float")) \
@@ -84,12 +107,24 @@ def assign_metros(df: DataFrame) -> DataFrame:
         F.col("longitude").alias("metro_lon"),
         F.col("population").alias("metro_population"),
         F.col("name").alias("metro_name"),
-        F.col("influence_radius")
+        F.col("influence_radius"),
+        F.col("country_code").alias("metro_country")  # Include the country code here
     )
+
     
-    # 6. Cross join non_metros_df with metros_small.
-    # Broadcasting metros_small if it's relatively small.
-    joined = non_metros_df.crossJoin(F.broadcast(metros_small))
+    if (all_countries):
+        # 6. Join non_metros_df with metros_small, restricting to the same country.
+        non_metros_df = non_metros_df.alias("n")
+        metros_small = metros_small.alias("m")
+        joined = non_metros_df.join(
+            F.broadcast(metros_small),
+            on=F.col("n.country_code") == F.col("m.metro_country"),
+            how="inner"
+        )
+    else:
+        # 6. Cross join non_metros_df with metros_small.
+        # Broadcasting metros_small if it's relatively small.
+        joined = non_metros_df.crossJoin(F.broadcast(metros_small))
     
     # 7. Compute the distance between each non-metro and metro pair.
     joined = joined.withColumn("distance", haversine_udf(F.col("latitude"), F.col("longitude"),
