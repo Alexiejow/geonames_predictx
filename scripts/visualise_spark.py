@@ -106,8 +106,11 @@ def generate_map(df, output_html="map.html", draw_lines=False):
     m.save(output_html)
     print(f"✅ Map saved to {output_html}")
 
-if __name__ == "__main__":
-    country_code = "PL"
+def main():
+
+    ####### CONFIGURATION #############################
+
+    country_code = "DE"
 
     # Load the CSV file.
     df = load_partitioned_csv(f"data/processed/country_code=" + country_code)
@@ -116,3 +119,9 @@ if __name__ == "__main__":
     generate_map(df,
                  output_html="data/visualisations/" + country_code + "_vis.html",
                  draw_lines=True)
+    
+    ####################################################
+   
+
+if __name__ == "__main__":
+    main()

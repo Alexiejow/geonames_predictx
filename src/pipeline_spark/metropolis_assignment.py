@@ -147,27 +147,3 @@ def assign_metros(df: DataFrame, all_countries=False) -> DataFrame:
     print(f"✅ Final dataset size: {final_df.count()}")
     return final_df
 
-
-# Example usage:
-if __name__ == "__main__":
-    import os
-    from pyspark.sql import SparkSession
-    spark = SparkSession.builder.master("local[*]").appName("GeoNamesPredictX_Spark").getOrCreate()
-    
-    BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-    data_path = os.path.join(BASE_DIR, "..", "data", "processed", "filtered_PL.csv")
-    
-    # Load CSV as Spark DataFrame. (Adjust options/schema as needed.)
-    df = spark.read.option("header", "true").csv(data_path)
-    df = df.withColumn("latitude", F.col("latitude").cast("float")) \
-           .withColumn("longitude", F.col("longitude").cast("float")) \
-           .withColumn("population", F.col("population").cast("int"))
-    
-    final_df = assign_metros(df)
-    
-    output_path = os.path.join(BASE_DIR, "data", "processed")
-    # Save as a single CSV file; note Spark writes a folder with part files.
-    final_df.coalesce(1).write.option("header", "true").mode("overwrite").csv(output_path)
-    print(f"Unified CSV saved as '{output_path}'")
-    
-    spark.stop()

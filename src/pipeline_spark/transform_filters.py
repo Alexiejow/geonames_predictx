@@ -3,8 +3,7 @@ from pyspark.sql import DataFrame, Column
 
 def filter_populated_places(df: DataFrame) -> DataFrame:
     """
-    Filters a Spark DataFrame to only include rows where the feature_code is one of:
-    ['PPL', 'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5', 'PPLC'].
+    Filters a Spark DataFrame to only include rows where the feature_code is one of the below
     """
     wanted_codes = ['PPL', 'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5', 'PPLC']
     return df.filter(F.col("feature_code").isin(wanted_codes))

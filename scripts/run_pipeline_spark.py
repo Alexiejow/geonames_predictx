@@ -14,13 +14,13 @@ from src.pipeline_spark.data_loader import (
     load_allcountries_data,
     save_csv,
     save_csv_partition_countries,
-    save_csv_single_file
 )
 from src.pipeline_spark.transform_filters import filter_populated_places, get_boundary_mask
 from src.pipeline_spark.metropolis_assignment import assign_metros
 from src.pipeline_spark.metropolis_assignment_iterative import assign_metros_iterative
 
 def main():
+
     ############### CONFIGURATION #################
 
     # Use a variable "DATASET" to decide which mode to run.
@@ -32,7 +32,7 @@ def main():
     
     ###############################################
     
-    # Initialize Spark in local mode (for development and testing).
+    # Initialize Spark in local mode
     # Increased memory of driver and executor because of errors
     spark = SparkSession.builder \
         .master("local[*]") \
@@ -42,7 +42,6 @@ def main():
         .getOrCreate()
     
     # 1) Download and load data.
-
     if dataset == "allCountries":
         print("Running for allCountries")
         df = load_allcountries_data(spark)
