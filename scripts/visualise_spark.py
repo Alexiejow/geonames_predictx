@@ -2,13 +2,13 @@ import os
 import sys
 import folium
 import pandas as pd
-import ast
-from tqdm import tqdm  # ✅ Import tqdm for progress bars
+from tqdm import tqdm 
+import glob
 
 base_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(base_dir)
 
-from src.pipeline_spark.data_loader import load_partitioned_csv, save_csv
+from src.pipeline_spark.data_loader import load_partitioned_csv
 
 def get_marker_radius(population):
     if population is None or population <= 0:
@@ -47,15 +47,21 @@ def draw_assigned_lines(df, geonameid_to_coords, line_group,
                     opacity=line_opacity
                 ).add_to(line_group)
 
-def generate_map(df, output_html="map.html", draw_lines=False):
+def generate_map(df, output_html="map.html", draw_lines=False, filter_assigned=False):
     """
     Generates a Folium map with:
       - A background layer for connection lines (if draw_lines is True)
       - Markers for each city (colored and sized by feature_code/population)
-      - Polygons if available in the 'polygons' column
-      - Optionally, if draw_lines is True, draws assigned connection lines 
+      - Optionally, if draw_lines is True, draws assigned connection lines
         from non-metro towns to their assigned metros in a separate FeatureGroup.
+      - If `filter_assigned=True`, only includes metros and towns assigned to metros.
     """
+
+    if filter_assigned:
+        print("📌 Filtering to only show metros and assigned towns...")
+        df = df[(df["isMetro"] == True) | df["assigned_metro_id"].notna()]
+        print(f"Filtered dataset: {len(df)} rows")
+
     print("📌 Creating city lookup dictionary...")
     geonameid_to_coords = {int(row["geonameid"]): (row["latitude"], row["longitude"])
                            for _, row in tqdm(df.iterrows(), total=len(df), desc="Building lookup", unit="cities") 
@@ -83,7 +89,7 @@ def generate_map(df, output_html="map.html", draw_lines=False):
         admin2_code = row.get("admin2_code", "")
         admin3_code = row.get("admin3_code", "")
 
-        color = "red" if feature_code.startswith("PPLA") else "green" if feature_code == "PPLC" else "blue"
+        color = "red" if row["isMetro"] else "blue"
         radius_value = get_marker_radius(population)
         tooltip_text = (
             f"City: {name}<br>"
@@ -107,21 +113,20 @@ def generate_map(df, output_html="map.html", draw_lines=False):
     print(f"✅ Map saved to {output_html}")
 
 def main():
-
     ####### CONFIGURATION #############################
 
-    country_code = "DE"
+    country_code = "PL"
 
     # Load the CSV file.
     df = load_partitioned_csv(f"data/processed/country_code=" + country_code)
-    
-    # Generate the map with draw_lines enabled.
+
+    # Generate the map with the filter applied.
     generate_map(df,
-                 output_html="data/visualisations/" + country_code + "_vis.html",
-                 draw_lines=True)
-    
+                 output_html=f"data/visualisations/{country_code}_vis.html",
+                 draw_lines=True,
+                 filter_assigned=False) # ✅ Set to True to only visualize metros & assigned towns
+
     ####################################################
-   
 
 if __name__ == "__main__":
     main()
