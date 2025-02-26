@@ -1,8 +1,5 @@
 venv/
-data/*.csv
-data/*.html
-data/*/*.csv
-data/*/*.html
-data/*/*.txt
+processed/
+visualisations/
 __pycache__
 .env
