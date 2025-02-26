@@ -7,7 +7,7 @@ import ast
 base_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(base_dir)
 
-from src.pipeline.data_loader import load_csv, save_csv
+from src.pipeline_spark.data_loader import load_partitioned_csv, save_csv
 
 def get_marker_radius(population):
     if population is None or population <= 0:
@@ -191,11 +191,14 @@ def safe_parse_candidates(val):
 
 
 if __name__ == "__main__":
+
+    country_code = "PL"
+
     # Load the CSV file.
-    df = load_csv("data/processed/assigned-metros-spark.csv")
+    df = load_partitioned_csv(f"data/processed/" + country_code)
     
     # Generate the map with draw_lines enabled.
     generate_map(df,
-                 output_html="data/visualisations/cities_map_PL.html",
+                 output_html="data/visualisations/" + country_code + "_vis.html",
                  draw_lines=True)
     

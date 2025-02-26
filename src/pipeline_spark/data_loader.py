@@ -141,6 +141,43 @@ def load_csv(spark: SparkSession, filepath: str, schema: StructType = None):
         reader = reader.schema(schema)
     return reader.csv(filepath)
 
+import os
+import pandas as pd
+import glob
+
+def load_partitioned_csv(directory_path: str) -> pd.DataFrame:
+    """
+    Loads partitioned CSV data written by Spark from a directory into a Pandas DataFrame.
+
+    - Reads all `part-xxxxx.csv` files inside the directory.
+    - Concatenates them into a single Pandas DataFrame.
+
+    Parameters:
+    - directory_path (str): Path to the partitioned CSV directory.
+
+    Returns:
+    - Pandas DataFrame
+    """
+    if not os.path.exists(directory_path):
+        raise FileNotFoundError(f"🚨 Directory not found: {directory_path}")
+
+    # Find all part files in the partitioned Spark output directory
+    csv_files = glob.glob(os.path.join(directory_path, "part-*.csv"))
+
+    if not csv_files:
+        raise ValueError(f"🚨 No partitioned CSV files found in: {directory_path}")
+
+    print(f"📂 Loading partitioned CSV files from: {directory_path}")
+
+    # Load all part CSVs into Pandas and concatenate
+    df_list = [pd.read_csv(file) for file in csv_files]
+    df = pd.concat(df_list, ignore_index=True)
+
+    print(f"✅ Loaded {len(df)} rows from partitioned output in {directory_path}")
+
+    return df
+
+
 def save_csv(df, filepath: str):
     """
     Saves a Spark DataFrame as a CSV file to the specified filepath.
