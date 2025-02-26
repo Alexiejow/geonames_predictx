@@ -1,5 +1,6 @@
 import math
 import numpy as np
+
 from pyspark.sql import functions as F
 from pyspark.sql import DataFrame
 from pyspark.sql.window import Window
@@ -7,13 +8,12 @@ from pyspark.sql.window import Window
 def debug_partition(index, iterator):
     records = list(iterator)
     if records:
-        # Get distinct country codes in this partition.
         countries = {row["country_code"] for row in records if "country_code" in row}
         print(f"Partition {index}: {len(records)} records, countries: {countries}")
     for record in records:
         yield record
 
-def assign_metros(df: DataFrame, all_countries = False) -> DataFrame:
+def assign_metros(df: DataFrame, all_countries=False) -> DataFrame:
     """
     Fully distributed Spark implementation of metro assignment.
     
@@ -35,125 +35,118 @@ def assign_metros(df: DataFrame, all_countries = False) -> DataFrame:
     
     Returns a Spark DataFrame with an extra column "assigned_metro_id" for non-metro rows.
     """
-    # Import the Spark version of the boundary mask from your transform_filters module.
-    # Ensure that module is Spark-friendly.
+
     from src.pipeline_spark.transform_filters import get_boundary_mask
 
-    # 1. Split DataFrame into metros and non-metros using the boundary mask.
-    mask = get_boundary_mask(df)  # mask is a Spark Column (boolean)
-    metros_df = df.filter(mask)
-    non_metros_df = df.filter(~mask)
-    
-    print("Total rows:", df.count())
-    print("Metros:", metros_df.count())
-    print("Non-metros:", non_metros_df.count())
-    
-    ######### DEBUGGING
+    # 1. **Split DataFrame into metros and non-metros**
+    metros_df = df.filter(F.col("isMetro") == True)
+    non_metros_df = df.filter(F.col("isMetro") == False)
 
-    # Debug: log partition details for non_metros_df
-    non_metros_debug_rdd = non_metros_df.rdd.mapPartitionsWithIndex(debug_partition)
-    metros_debug_rdd = metros_df.rdd.mapPartitionsWithIndex(debug_partition)
-    non_metros_debug_rdd.take(1)
-    metros_debug_rdd.take(1)
+    print(f"📊 Start: Total Rows: {df.count()} | Metros: {metros_df.count()} | Non-Metros: {non_metros_df.count()}")
 
-    # Convert back to a DataFrame using the active SparkSession.
-    non_metros_df = df.sparkSession.createDataFrame(non_metros_debug_rdd, schema=non_metros_df.schema)
-    metros_df = df.sparkSession.createDataFrame(metros_debug_rdd, schema=metros_df.schema)
-    
+    # # **Debug: Partition details**
+    # non_metros_debug_rdd = non_metros_df.rdd.mapPartitionsWithIndex(debug_partition)
+    # metros_debug_rdd = metros_df.rdd.mapPartitionsWithIndex(debug_partition)
+    # non_metros_debug_rdd.take(1)
+    # metros_debug_rdd.take(1)
 
+    # non_metros_df = df.sparkSession.createDataFrame(non_metros_debug_rdd, schema=non_metros_df.schema)
+    # metros_df = df.sparkSession.createDataFrame(metros_debug_rdd, schema=metros_df.schema)
 
-    # 2. Cast necessary columns.
+    # 2. **Cast necessary columns**
     metros_df = metros_df.withColumn("population", F.col("population").cast("int"))
     non_metros_df = non_metros_df.withColumn("latitude", F.col("latitude").cast("float")) \
                                  .withColumn("longitude", F.col("longitude").cast("float"))
-    
-    # 3. Define UDFs (defined here, after the SparkSession is active).
-    
-    # UDF for haversine distance.
-    def haversine_distance_udf(lat1, lon1, lat2, lon2):
-        R = 6371.0  # km
-        phi1 = math.radians(lat1)
-        phi2 = math.radians(lat2)
-        dphi = math.radians(lat2 - lat1)
-        dlambda = math.radians(lon2 - lon1)
-        a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(dlambda/2)**2
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-        return float(R * c)
-    
-    haversine_udf = F.udf(haversine_distance_udf, "float")
-    
-    # UDF for influence radius based on population.
-    def radius_udf(pop):
-        METRO_CITY_POPULATION_CONSTANT = -1 / 1443000
-        MIN_METRO_CITY_RADIUS = 10
-        MAX_METRO_CITY_RADIUS = 90
-        return float(MIN_METRO_CITY_RADIUS + MAX_METRO_CITY_RADIUS * (1 - math.exp(METRO_CITY_POPULATION_CONSTANT * pop)))
-    
-    radius_udf_func = F.udf(radius_udf, "float")
-    
-    # UDF for force calculation.
-    def force_udf(distance, influence_radius):
-        return float(math.exp(-1.4 * distance / influence_radius))
-    
-    force_udf_func = F.udf(force_udf, "float")
-    
-    # 4. For metros_df, compute the influence radius.
-    metros_df = metros_df.withColumn("influence_radius", radius_udf_func(F.col("population")))
-    
-    # 5. Create a small DataFrame from metros_df for the join.
-    metros_small = metros_df.select(
-        F.col("geonameid").alias("metro_id"),
-        F.col("latitude").alias("metro_lat"),
-        F.col("longitude").alias("metro_lon"),
-        F.col("population").alias("metro_population"),
-        F.col("name").alias("metro_name"),
-        F.col("influence_radius"),
-        F.col("country_code").alias("metro_country")  # Include the country code here
-    )
 
-    
-    if (all_countries):
-        # 6. Join non_metros_df with metros_small, restricting to the same country.
-        non_metros_df = non_metros_df.alias("n")
-        metros_small = metros_small.alias("m")
-        joined = non_metros_df.join(
-            F.broadcast(metros_small),
-            on=F.col("n.country_code") == F.col("m.metro_country"),
-            how="inner"
+    # 3. **Define UDFs**
+    def haversine_distance(lat1, lon1, lat2, lon2):
+        R = 6371.0  # Earth radius in km
+        phi1, phi2 = map(math.radians, [lat1, lat2])
+        dphi, dlambda = map(math.radians, [lat2 - lat1, lon2 - lon1])
+        a = math.sin(dphi / 2)**2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2)**2
+        return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    haversine_udf = F.udf(haversine_distance, "float")
+
+    def compute_radius(population):
+        METRO_CITY_POPULATION_CONSTANT = -1 / 1443000
+        MIN_RADIUS, MAX_RADIUS = 10, 90
+        return float(MIN_RADIUS + MAX_RADIUS * (1 - math.exp(METRO_CITY_POPULATION_CONSTANT * population)))
+
+    radius_udf = F.udf(compute_radius, "float")
+
+    def compute_force(distance, radius):
+        return float(math.exp(-1.4 * distance / radius))
+
+    force_udf = F.udf(compute_force, "float")
+
+    # 4. **Compute influence radius for metros**
+    metros_df = metros_df.withColumn("influence_radius", radius_udf(F.col("population")))
+
+    # 5. **Compute bounding box limits**
+    metros_df = metros_df.withColumn("lat_min", F.col("latitude") - (F.col("influence_radius") / 111.0))
+    metros_df = metros_df.withColumn("lat_max", F.col("latitude") + (F.col("influence_radius") / 111.0))
+    metros_df = metros_df.withColumn("lon_min", F.col("longitude") - (F.col("influence_radius") / (111.0 * F.cos(F.radians(F.col("latitude"))))))
+    metros_df = metros_df.withColumn("lon_max", F.col("longitude") + (F.col("influence_radius") / (111.0 * F.cos(F.radians(F.col("latitude"))))))
+
+    # 6. **Join non-metros with metros using bounding box filter**
+    if all_countries:
+        # Join **without** country restriction
+        joined = non_metros_df.alias("n").join(
+            metros_df.alias("m"),
+            (F.col("n.latitude") >= F.col("m.lat_min")) &
+            (F.col("n.latitude") <= F.col("m.lat_max")) &
+            (F.col("n.longitude") >= F.col("m.lon_min")) &
+            (F.col("n.longitude") <= F.col("m.lon_max")),
+            "inner"
         )
     else:
-        # 6. Cross join non_metros_df with metros_small.
-        # Broadcasting metros_small if it's relatively small.
-        joined = non_metros_df.crossJoin(F.broadcast(metros_small))
-    
-    # 7. Compute the distance between each non-metro and metro pair.
-    joined = joined.withColumn("distance", haversine_udf(F.col("latitude"), F.col("longitude"),
-                                                         F.col("metro_lat"), F.col("metro_lon")))
-    
-    # 8. Keep only pairs where distance is less than the metro's influence radius.
-    joined = joined.filter(F.col("distance") < F.col("influence_radius"))
-    
-    # 9. Compute the force for each pair.
-    joined = joined.withColumn("force", force_udf_func(F.col("distance"), F.col("influence_radius")))
-    
-    # 10. For each non-metro, select the metro with the highest force using a window function.
-    windowSpec = Window.partitionBy("geonameid").orderBy(F.col("force").desc())
-    joined = joined.withColumn("rank", F.row_number().over(windowSpec))
-    best_matches = joined.filter(F.col("rank") == 1).select("geonameid", "metro_id")
-    
-    # 11. Join best matches back to non_metros_df.
-    non_metros_assigned = non_metros_df.join(best_matches, on="geonameid", how="left") \
-                                    .withColumnRenamed("metro_id", "assigned_metro_id")
+        # Join **with** country restriction
+        joined = non_metros_df.alias("n").join(
+            metros_df.alias("m"),
+            (F.col("n.latitude") >= F.col("m.lat_min")) &
+            (F.col("n.latitude") <= F.col("m.lat_max")) &
+            (F.col("n.longitude") >= F.col("m.lon_min")) &
+            (F.col("n.longitude") <= F.col("m.lon_max")) &
+            (F.col("n.country_code") == F.col("m.country_code")),
+            "inner"
+        )
 
-    
-    # 12. For metros_df, assign their own ID as the assigned metro.
-    metros_assigned = metros_df.withColumn("assigned_metro_id", F.col("geonameid"))
-    
-    # 13. Union the two subsets.
-    final_df = metros_assigned.unionByName(non_metros_assigned, allowMissingColumns=True)
-    final_df = final_df.orderBy("geonameid")
-    
+    print(f"📌 Total (non-metro, metro) candidate pairs after bounding box filter: {joined.count()}")
+
+    # 7. **Compute distances & filter**
+    joined = joined.withColumn("distance", haversine_udf(F.col("n.latitude"), F.col("n.longitude"),
+                                                          F.col("m.latitude"), F.col("m.longitude")))
+
+    joined = joined.filter(F.col("distance") < F.col("m.influence_radius"))
+
+    print(f"📌 Total pairs after influence radius filter: {joined.count()}")
+
+    # 8. **Compute influence force**
+    joined = joined.withColumn("force", force_udf(F.col("distance"), F.col("m.influence_radius")))
+
+    # 9. **Select the strongest metro for each non-metro**
+    windowSpec = Window.partitionBy("n.geonameid").orderBy(F.col("force").desc())
+    best_matches = joined.withColumn("rank", F.row_number().over(windowSpec)) \
+                         .filter(F.col("rank") == 1) \
+                         .select(
+                             F.col("n.geonameid"),
+                             F.col("m.geonameid").alias("assigned_metro_id"),
+                         )
+
+    assigned_count = best_matches.count()
+    print(f"✅ Total non-metros assigned: {assigned_count}")
+
+    # 10. **Assign metros to themselves**
+    metros_df = metros_df.withColumn("assigned_metro_id", F.col("geonameid"))
+
+    # 11. **Merge all data back**
+    non_metros_df = non_metros_df.join(best_matches, "geonameid", "left")
+    final_df = metros_df.unionByName(non_metros_df, allowMissingColumns=True)
+
+    print(f"✅ Final dataset size: {final_df.count()}")
     return final_df
+
 
 # Example usage:
 if __name__ == "__main__":
@@ -172,7 +165,7 @@ if __name__ == "__main__":
     
     final_df = assign_metros(df)
     
-    output_path = os.path.join(BASE_DIR, "data", "processed", "final_with_metropolis_assignment_spark.csv")
+    output_path = os.path.join(BASE_DIR, "data", "processed")
     # Save as a single CSV file; note Spark writes a folder with part files.
     final_df.coalesce(1).write.option("header", "true").mode("overwrite").csv(output_path)
     print(f"Unified CSV saved as '{output_path}'")

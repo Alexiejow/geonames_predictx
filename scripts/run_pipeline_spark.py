@@ -2,6 +2,7 @@ import os
 import sys
 from dotenv import load_dotenv
 from pyspark.sql import SparkSession
+import pyspark.sql.functions as F
 
 # Set up the base directory and ensure it's on the Python path.
 base_dir = os.path.dirname(os.path.dirname(__file__))
@@ -15,7 +16,7 @@ from src.pipeline_spark.data_loader import (
     save_csv_partition_countries,
     save_csv_single_file
 )
-from src.pipeline_spark.transform_filters import filter_populated_places
+from src.pipeline_spark.transform_filters import filter_populated_places, get_boundary_mask
 from src.pipeline_spark.metropolis_assignment import assign_metros
 from src.pipeline_spark.metropolis_assignment_iterative import assign_metros_iterative
 
@@ -25,7 +26,7 @@ def main():
     # Use a variable "DATASET" to decide which mode to run.
     # For a specific country, set DATASET to its country code (e.g., "PL").
     # For processing all countries, set DATASET="allCountries".
-    dataset = "allCountries"  # default to "PL" if not set
+    dataset = "DE"  # default to "PL" if not set
     load_dotenv()  
     API_KEY = os.getenv("GEOAPIFY_API_KEY")  # if needed in further processing
     
@@ -57,9 +58,13 @@ def main():
     df_filtered = filter_populated_places(df)
     print(f"After filtering, {df_filtered.count()} rows remain.")
     
+    # 2.5) Identify metros and non-metros
+    mask = get_boundary_mask(df_filtered)
+    df_split = df_filtered.withColumn("isMetro", F.when(mask, True).otherwise(False))
+
     # 3) Run metro assignment using Spark.
     print("Running metro assignment")
-    df_metro_assigned = assign_metros(df_filtered, all_countries=(dataset=="allCountries"))
+    df_metro_assigned = assign_metros(df_split, all_countries=(dataset=="allCountries"))
 
     # 4) Save the output.
 
@@ -69,7 +74,7 @@ def main():
         save_csv_partition_countries(df_metro_assigned, output_path)
         print(f"Saved assigned metros (partitioned by country) to {output_path}")
     else:
-        output_path = os.path.join(base_dir, "data", "processed", "country_code=", dataset)
+        output_path = os.path.join(base_dir, "data", "processed", "country_code="+dataset)
         save_csv(df_metro_assigned, output_path)
         print(f"Saved assigned metros to {output_path}")
     
