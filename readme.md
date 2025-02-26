@@ -25,9 +25,9 @@ python scripts/visualise_spark.py
 ```
 
 As a default, these are set to download and visualise data for "PL".
-Within **run_pipeline_spark.py**, can the **dataset** variable to other [country codes](http://download.geonames.org/export/dump), or even *allCountries*.
+Within **run_pipeline_spark.py**, you can change the **dataset** variable to other [country codes](http://download.geonames.org/export/dump), or even *allCountries*. The output will be saved in *data/processed/* under a given country code.
 
-The *visualise_spark.py* file can only create a visualisation for one country. In the *main()* function, apart from the country code you can specify a *draw_lines* variable - if it should include the lines between non-metroes and metroes, as well as set *filter_assigned* - if it should only include the assigned non-metroes.
+The *visualise_spark.py* file can only create a visualisation for one country. In the *main()* function, apart from the country code you can specify a *draw_lines* variable - if it should include the lines between non-metroes and metroes, as well as set *filter_assigned* - if it should only include the assigned non-metroes. It will create a visualisation in the */data/visualisations* directory.
 
 Additionally, you can run the script below to create one, merged CSV for a selected country.
 ```bash
