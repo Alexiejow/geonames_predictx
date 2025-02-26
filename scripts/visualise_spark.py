@@ -110,7 +110,7 @@ if __name__ == "__main__":
     country_code = "PL"
 
     # Load the CSV file.
-    df = load_partitioned_csv(f"data/processed/" + country_code)
+    df = load_partitioned_csv(f"data/processed/country_code=" + country_code)
     
     # Generate the map with draw_lines enabled.
     generate_map(df,

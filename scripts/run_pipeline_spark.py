@@ -21,18 +21,18 @@ from src.pipeline_spark.metropolis_assignment_iterative import assign_metros_ite
 
 def main():
     ############### CONFIGURATION #################
-    
+
     # Use a variable "DATASET" to decide which mode to run.
     # For a specific country, set DATASET to its country code (e.g., "PL").
     # For processing all countries, set DATASET="allCountries".
-    dataset = "PL"  # default to "PL" if not set
+    dataset = "allCountries"  # default to "PL" if not set
     load_dotenv()  
     API_KEY = os.getenv("GEOAPIFY_API_KEY")  # if needed in further processing
     
     ###############################################
     
     # Initialize Spark in local mode (for development and testing).
-    # Increased memory of driver and executor because of errors (also for dev and testing)
+    # Increased memory of driver and executor because of errors
     spark = SparkSession.builder \
         .master("local[*]") \
         .appName("GeoNamesPredictX_Spark") \
@@ -41,10 +41,11 @@ def main():
         .getOrCreate()
     
     # 1) Download and load data.
+
     if dataset == "allCountries":
         print("Running for allCountries")
         df = load_allcountries_data(spark)
-        # Repartition by "country_code" so that data for each country is processed in parallel.
+        # Repartition by "country_code" so that multiple countries can be processed in parallel.
         df = df.repartition("country_code")
     else:
         print(f"Running for country code: {dataset}")
@@ -68,7 +69,7 @@ def main():
         save_csv_partition_countries(df_metro_assigned, output_path)
         print(f"Saved assigned metros (partitioned by country) to {output_path}")
     else:
-        output_path = os.path.join(base_dir, "data", "processed", dataset)
+        output_path = os.path.join(base_dir, "data", "processed", "country_code=", dataset)
         save_csv(df_metro_assigned, output_path)
         print(f"Saved assigned metros to {output_path}")
     
