@@ -3,6 +3,7 @@ import sys
 import folium
 import pandas as pd
 import ast
+from tqdm import tqdm  # ✅ Import tqdm for progress bars
 
 base_dir = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(base_dir)
@@ -27,7 +28,7 @@ def draw_assigned_lines(df, geonameid_to_coords, line_group,
     """
     Draws lines from each non-metro town to its assigned metro.
     """
-    for idx, row in df.iterrows():
+    for idx, row in tqdm(df.iterrows(), total=len(df), desc="Drawing lines", unit="lines"):
         assigned_id = row.get(assigned_col)
         if pd.notna(assigned_id):
             try:
@@ -45,10 +46,6 @@ def draw_assigned_lines(df, geonameid_to_coords, line_group,
                     weight=line_weight,
                     opacity=line_opacity
                 ).add_to(line_group)
-                print(f"Row {idx}: Drew line from ({city_lat}, {city_lon}) to metro {assigned_id_int} at ({metro_lat}, {metro_lon}).")
-            else:
-                print(f"Row {idx}: assigned_metro_id {assigned_id_int} not found in lookup dictionary.")
-
 
 def generate_map(df, output_html="map.html", draw_lines=False):
     """
@@ -59,31 +56,24 @@ def generate_map(df, output_html="map.html", draw_lines=False):
       - Optionally, if draw_lines is True, draws assigned connection lines 
         from non-metro towns to their assigned metros in a separate FeatureGroup.
     """
-    # Build a lookup dictionary: geonameid -> (latitude, longitude)
-    geonameid_to_coords = {}
-    for _, row in df.iterrows():
-        try:
-            key = int(row["geonameid"])
-        except ValueError:
-            continue
-        geonameid_to_coords[key] = (row["latitude"], row["longitude"])
+    print("📌 Creating city lookup dictionary...")
+    geonameid_to_coords = {int(row["geonameid"]): (row["latitude"], row["longitude"])
+                           for _, row in tqdm(df.iterrows(), total=len(df), desc="Building lookup", unit="cities") 
+                           if pd.notna(row["geonameid"])}
 
-    
-    # Create the base map, centered on the average lat/lon
     mean_lat = df["latitude"].mean()
     mean_lon = df["longitude"].mean()
     m = folium.Map(location=[mean_lat, mean_lon], zoom_start=6)
-    
-    # Create a FeatureGroup for lines so they appear at the bottom.
+
     line_group = folium.FeatureGroup(name="Assigned Lines", overlay=True)
     if draw_lines and "assigned_metro_id" in df.columns:
         draw_assigned_lines(df, geonameid_to_coords, line_group,
                             assigned_col="assigned_metro_id",
                             line_color="darkred", line_weight=2, line_opacity=0.5)
     line_group.add_to(m)
-    
-    # Plot markers and polygons for each city.
-    for idx, row in df.iterrows():
+
+    print("📌 Placing city markers on the map...")
+    for _, row in tqdm(df.iterrows(), total=len(df), desc="Adding markers", unit="cities"):
         lat = row["latitude"]
         lon = row["longitude"]
         feature_code = str(row["feature_code"])
@@ -92,35 +82,16 @@ def generate_map(df, output_html="map.html", draw_lines=False):
         admin1_code = row.get("admin1_code", "")
         admin2_code = row.get("admin2_code", "")
         admin3_code = row.get("admin3_code", "")
-        
-        # Determine marker color
-        if feature_code.startswith("PPLA"):
-            color = "red"
-        elif feature_code == "PPLC":
-            color = "green"
-        else:
-            color = "blue"
-        
+
+        color = "red" if feature_code.startswith("PPLA") else "green" if feature_code == "PPLC" else "blue"
         radius_value = get_marker_radius(population)
-        
-        # Build basic tooltip text.
         tooltip_text = (
             f"City: {name}<br>"
             f"Population: {population}<br>"
             f"Feature: {feature_code}<br>"
             f"Admin1: {admin1_code}, Admin2: {admin2_code}, Admin3: {admin3_code}"
         )
-        
-        # If draw_lines is enabled and candidate info is available, append candidate details.
-        if draw_lines and "candidate_metro_ids" in df.columns:
-            candidates = row.get("candidate_metro_ids", [])
-            if isinstance(candidates, list) and len(candidates) > 0:
-                candidate_str = "<br>Candidate Metros:<br>" + "<br>".join(
-                    [f"{cand['metro_name']} | {cand['metro_id']} (force: {cand['force']:.3f}, dist: {cand['distance']:.1f} km)"
-                     for cand in candidates if isinstance(cand, dict) and 'metro_id' in cand]
-                )
-                tooltip_text += candidate_str
-        
+
         folium.CircleMarker(
             location=[lat, lon],
             radius=radius_value,
@@ -130,68 +101,12 @@ def generate_map(df, output_html="map.html", draw_lines=False):
             fill_opacity=0.8,
             tooltip=tooltip_text
         ).add_to(m)
-        
-        # Overlay polygons if available.
-        polygons = row.get("polygons", None)
-        if isinstance(polygons, list) and len(polygons) > 0:
-            for poly in polygons:
-                folium.Polygon(
-                    locations=poly,
-                    color="cyan",
-                    weight=2,
-                    fill=True,
-                    fill_color="yellow",
-                    fill_opacity=0.3,
-                    tooltip=tooltip_text
-                ).add_to(m)
-    
+
+    print(f"Saving map to {output_html}")
     m.save(output_html)
-    print(f"Map saved to {output_html}")
-
-
-def safe_parse_polygons(val):
-    """
-    Safely parse the 'polygons' column from the CSV.
-    Returns a list of polygon coordinates or an empty list if parsing fails.
-    """
-    if pd.isna(val):
-        return []
-    if isinstance(val, list):
-        return val
-    if isinstance(val, str):
-        try:
-            parsed = ast.literal_eval(val)
-            if isinstance(parsed, list):
-                return parsed
-            else:
-                return []
-        except Exception:
-            return []
-    return []
-
-
-def safe_parse_candidates(val):
-    """
-    Safely parse 'candidate_metro_ids' from CSV.
-    Returns a list of dictionaries or an empty list if parsing fails.
-    """
-    if pd.isna(val) or val == "[]":
-        return []
-    if isinstance(val, list):
-        return val
-    if isinstance(val, str):
-        try:
-            parsed = ast.literal_eval(val)
-            if isinstance(parsed, list):
-                return parsed
-        except Exception as e:
-            print(f"Error parsing candidate_metro_ids: {e}, value: {val}")
-            return []
-    return []
-
+    print(f"✅ Map saved to {output_html}")
 
 if __name__ == "__main__":
-
     country_code = "PL"
 
     # Load the CSV file.
@@ -201,4 +116,3 @@ if __name__ == "__main__":
     generate_map(df,
                  output_html="data/visualisations/" + country_code + "_vis.html",
                  draw_lines=True)
-    
