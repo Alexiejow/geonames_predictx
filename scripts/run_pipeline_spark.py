@@ -11,18 +11,21 @@ sys.path.append(base_dir)
 from src.pipeline_spark.data_loader import (
     load_geonames_data,
     load_allcountries_data,
+    save_csv,
     save_csv_partition_countries,
     save_csv_single_file
 )
 from src.pipeline_spark.transform_filters import filter_populated_places
 from src.pipeline_spark.metropolis_assignment import assign_metros
+from src.pipeline_spark.metropolis_assignment_iterative import assign_metros_iterative
 
 def main():
     ############### CONFIGURATION #################
+    
     # Use a variable "DATASET" to decide which mode to run.
     # For a specific country, set DATASET to its country code (e.g., "PL").
     # For processing all countries, set DATASET="allCountries".
-    dataset = "IN"  # default to "PL" if not set
+    dataset = "PL"  # default to "PL" if not set
     load_dotenv()  
     API_KEY = os.getenv("GEOAPIFY_API_KEY")  # if needed in further processing
     
@@ -55,21 +58,18 @@ def main():
     
     # 3) Run metro assignment using Spark.
     print("Running metro assignment")
-    if dataset == "allCountries":
-        df_metro_assigned = assign_metros(df_filtered, all_countries=True)
-    else:
-        df_metro_assigned = assign_metros(df_filtered)
-    
+    df_metro_assigned = assign_metros(df_filtered, all_countries=(dataset=="allCountries"))
+
     # 4) Save the output.
+
     if dataset == "allCountries":
         # This will save the data partitioned by "country_code" (i.e., separate folders for each country).
-        output_path = os.path.join(base_dir, "data", "processed", "metros_assigned_allCountries.csv")
+        output_path = os.path.join(base_dir, "data", "processed")
         save_csv_partition_countries(df_metro_assigned, output_path)
         print(f"Saved assigned metros (partitioned by country) to {output_path}")
     else:
-        output_path = os.path.join(base_dir, "data", "processed", f"metros_assigned_{dataset}.csv")
-        # save_csv_single_file(df_metro_assigned, output_path)
-        save_csv_partition_countries(df_metro_assigned, output_path)
+        output_path = os.path.join(base_dir, "data", "processed", dataset)
+        save_csv(df_metro_assigned, output_path)
         print(f"Saved assigned metros to {output_path}")
     
     # Stop the Spark session.
