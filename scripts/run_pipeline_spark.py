@@ -17,7 +17,6 @@ from src.pipeline_spark.data_loader import (
 )
 from src.pipeline_spark.transform_filters import filter_populated_places, get_boundary_mask
 from src.pipeline_spark.metropolis_assignment import assign_metros
-from src.pipeline_spark.metropolis_assignment_iterative import assign_metros_iterative
 
 def main():
 
@@ -26,7 +25,7 @@ def main():
     # Use a variable "DATASET" to decide which mode to run.
     # For a specific country, set DATASET to its country code (e.g., "PL").
     # For processing all countries, set DATASET="allCountries".
-    dataset = "DE"  # default to "PL" if not set
+    dataset = "PL"  # default to "PL" if not set
     load_dotenv()  
     API_KEY = os.getenv("GEOAPIFY_API_KEY")  # if needed in further processing
     
