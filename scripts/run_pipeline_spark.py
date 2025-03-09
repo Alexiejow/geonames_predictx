@@ -33,11 +33,18 @@ def main():
     
     # Initialize Spark in local mode
     # Increased memory of driver and executor because of errors
+    # spark = SparkSession.builder \
+    #     .master("local[*]") \
+    #     .appName("GeoNamesPredictX_Spark") \
+    #     .config("spark.driver.memory", "4g") \
+    #     .config("spark.executor.memory", "4g") \
+    #     .getOrCreate()
+    
     spark = SparkSession.builder \
-        .master("local[*]") \
-        .appName("GeoNamesPredictX_Spark") \
-        .config("spark.driver.memory", "4g") \
-        .config("spark.executor.memory", "4g") \
+        .appName("Sedona App") \
+        .config("spark.jars.packages", "org.apache.sedona:sedona-spark-shaded-3.0_2.12:1.6.1,org.datasyslab:geotools-wrapper:1.1.0-25.2") \
+        .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
+        .config("spark.kryo.registrator", "org.apache.sedona.core.serde.SedonaKryoRegistrator") \
         .getOrCreate()
     
     # 1) Download and load data.
@@ -50,31 +57,26 @@ def main():
         print(f"Running for country code: {dataset}")
         df = load_geonames_data(spark, dataset)
     
-    print(f"Loaded {df.count()} rows from GeoNames.")
-    
     # 2) Filter for populated places using Spark transformations.
     df_filtered = filter_populated_places(df)
-    print(f"After filtering, {df_filtered.count()} rows remain.")
     
-    # 2.5) Identify metros and non-metros
+    # 3) Identify metros and non-metros
+    print("Splitting into metros and non-metros")
     mask = get_boundary_mask(df_filtered)
     df_split = df_filtered.withColumn("isMetro", F.when(mask, True).otherwise(False))
 
-    # 3) Run metro assignment using Spark.
-    print("Running metro assignment")
-    df_metro_assigned = assign_metros(df_split, all_countries=(dataset=="allCountries"))
+    # 4) Run metro assignment using Spark.
+    print("Running metro assignment...")
+    df_metro_assigned = assign_metros(spark, df_split, all_countries=(dataset=="allCountries"))
 
-    # 4) Save the output.
-
+    # 5) Save the output.
     if dataset == "allCountries":
         # This will save the data partitioned by "country_code" (i.e., separate folders for each country).
         output_path = os.path.join(base_dir, "data", "processed")
         save_csv_partition_countries(df_metro_assigned, output_path)
-        print(f"Saved assigned metros (partitioned by country) to {output_path}")
     else:
         output_path = os.path.join(base_dir, "data", "processed", "country_code="+dataset)
         save_csv(df_metro_assigned, output_path)
-        print(f"Saved assigned metros to {output_path}")
     
     # Stop the Spark session.
     spark.stop()

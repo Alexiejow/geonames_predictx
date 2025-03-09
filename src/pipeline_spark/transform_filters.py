@@ -6,7 +6,9 @@ def filter_populated_places(df: DataFrame) -> DataFrame:
     Filters a Spark DataFrame to only include rows where the feature_code is one of the below
     """
     wanted_codes = ['PPL', 'PPLA', 'PPLA2', 'PPLA3', 'PPLA4', 'PPLA5', 'PPLC']
-    return df.filter(F.col("feature_code").isin(wanted_codes))
+    df_filtered = df.filter(F.col("feature_code").isin(wanted_codes))
+    print(f"After filtering for populated places, {df_filtered.count()} rows remain.")
+    return df_filtered
 
 def get_boundary_mask(df: DataFrame) -> Column:
     """
